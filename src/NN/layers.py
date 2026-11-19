@@ -665,6 +665,7 @@ class AM_Decoder(nn.Module):
                 next_node = torch.stack((vehicle_sel, customer_sel), dim=1)
             else:
                 next_node = fixed_next_node  # (batch_size, 2)
+                next_node_sel = next_node[:, 0] * ref_num + next_node[:, 1]
 
             arange = torch.arange(batch_size)
             sel_log_p = log_p[arange, next_node_sel]  # (batch_size,)

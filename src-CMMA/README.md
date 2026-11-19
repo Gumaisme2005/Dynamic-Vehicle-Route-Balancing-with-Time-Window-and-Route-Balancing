@@ -3,10 +3,9 @@
 This repo implements CMMA baseline in our paper: Deep Reinforcement Learning for the Vehicle Routing Problem with Route Balancing
 
 ## Dependencies
-* Python>=3.8
+* Python>=3.10
 * numpy
-* hvwfg
-* geatpy
+* matplotlib (only needed for `analyse_result.py`)
 
 ## Usage
 

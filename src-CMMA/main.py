@@ -2,8 +2,8 @@ import os, json, time
 from typing import Any, Dict
 
 import numpy as np
-import hvwfg, geatpy
 
+from mo_compat import hv_indicator, hv_wfg
 from option import get_option, Option
 from split_tour import get_distance, get_max_distance
 from evo import CMMA
@@ -61,11 +61,11 @@ def run(option: Option) -> None:
                 )
             obj_array = np.array(obj_value['obj'])
             if option.ref_point is not None:
-                hv = hvwfg.wfg(obj_array, np.array(option.ref_point))
+                hv = hv_wfg(obj_array, np.array(option.ref_point))
                 hv_ratio = hv / (option.ref_point[0] * option.ref_point[1])
                 obj_value['hv'] = hv_ratio
             else:
-                obj_value['hv'] = geatpy.indicator.HV(obj_array)
+                obj_value['hv'] = hv_indicator(obj_array)
 
             if not option.no_display:
                 s = f'[{time.strftime("%m/%d %H:%M:%S")}] {option.load_file}[{option.problem_index}] gen {i} HV: {obj_value["hv"]}'

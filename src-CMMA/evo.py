@@ -1,8 +1,8 @@
-from typing import List, Optional, Tuple, cast, Generator
+from typing import List, Optional, Generator
 import random, os
 import numpy as np
-import geatpy
 
+from mo_compat import crowdis, ndsort_ess
 import split_tour
 
 
@@ -99,7 +99,7 @@ def recombination(
                 with open(os.path.join(save_path, 'log_bad_split.txt'), 'a') as f:
                     f.write(f'bad sum split:\n{action_sum}\n\n')
 
-        if len(route_sum) != 0:
+        if len(route_max) != 0:
             P_route.append(route_max)
         else:
             P_route.append(random.choice(population))
@@ -229,14 +229,12 @@ def pareto_sort(
     objv = np.array(objv_list)
 
     # nd_sort
-    levels, criLevel = cast(
-        Tuple[np.ndarray, int], geatpy.ndsortESS(objv, needNum, needLevel)
-    )
-    dis = cast(np.ndarray, geatpy.crowdis(objv, levels))
+    levels, criLevel = ndsort_ess(objv, needNum, needLevel)
+    dis = crowdis(objv, levels)
     ###
 
     if needNum is None:
-        needNum = len(P)
+        needNum = len(population)
 
     sortP = []
     for lv in range(1, criLevel):

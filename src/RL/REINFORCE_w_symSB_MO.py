@@ -1,11 +1,11 @@
 from typing import TYPE_CHECKING, Optional
 import torch
-from torch.utils.tensorboard import SummaryWriter
 
 from utils import augment, clip_grad_norms
 from .REINFORCE_w_symSB import set_penalty
 
 if TYPE_CHECKING:
+    from torch.utils.tensorboard import SummaryWriter
     from .agent import Agent
 
 

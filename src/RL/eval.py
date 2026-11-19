@@ -12,7 +12,6 @@ import torch.utils.data.distributed
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
 from tqdm import tqdm
-import geatpy
 import numpy as np
 
 
@@ -20,7 +19,7 @@ from problem.cvrp import generate_datasets as generate_datasets_cvrp
 from problem.cvrp_balance import generate_datasets as generate_datasets_cvrp_balance
 from problem.tsp import generate_datasets as generate_datasets_tsp
 from route_solver import TspSolver, pretrained_model, zoom
-from utils import augment, batch_slicer
+from utils import augment, batch_slicer, crowdis, ndsort_ess
 
 if TYPE_CHECKING:
     from .agent import Agent
@@ -58,7 +57,7 @@ def eval(
 
     random_state_backup = (
         torch.get_rng_state(),
-        torch.cuda.get_rng_state(),
+        torch.cuda.get_rng_state() if option.use_cuda else None,
         random.getstate(),
     )
 
@@ -217,7 +216,8 @@ def eval(
             )
 
     torch.set_rng_state(random_state_backup[0])
-    torch.cuda.set_rng_state(random_state_backup[1])
+    if random_state_backup[1] is not None:
+        torch.cuda.set_rng_state(random_state_backup[1])
     random.setstate(random_state_backup[2])
 
     return rewards, infeasible, action, addtion_rewards, time_used
@@ -840,10 +840,8 @@ def solve_mo(
     selected_action_list = []
     selected_reward_list = []
     for p_i, objv in enumerate(all_objv):
-        levels, criLevel = cast(
-            Tuple[np.ndarray, np.ndarray], geatpy.ndsortESS(objv, needNum, needLevel)
-        )
-        dis = cast(np.ndarray, geatpy.crowdis(objv, levels))
+        levels, criLevel = ndsort_ess(objv, needNum, needLevel)
+        dis = crowdis(objv, levels)
 
         sortI = []
         sortA = []
@@ -859,19 +857,21 @@ def solve_mo(
                     sortA.append(
                         all_action[p_i, nd_i.item()]
                     )  # (vehicle_num, action_length)
-                sortI.append(all_pref_infeasible[p_i, nd_i.item()])
+                if all_pref_infeasible is not None:
+                    sortI.append(all_pref_infeasible[p_i, nd_i.item()])
 
         single_reward = torch.stack(sortR[:needNum])  # (needNum, reward_dim)
         if save_action:
             single_action = torch.stack(
                 sortA[:needNum]
             )  # (needNum, vehicle_num, action_length)
-        single_infeasible = torch.stack(sortI[:needNum])  # (needNum,)
+        if all_pref_infeasible is not None:
+            single_infeasible = torch.stack(sortI[:needNum])  # (needNum,)
+            select_infeasible_list.append(single_infeasible)
 
         selected_reward_list.append(single_reward)
         if save_action:
             selected_action_list.append(single_action)
-        select_infeasible_list.append(single_infeasible)
 
         if progress_bar is not None:
             sub_eval_bar.update()
@@ -885,7 +885,11 @@ def solve_mo(
             selected_action_list
         )  # (batch_size, needNum, vehicle_num, action_length)
         ret_action = select_action
-    select_infeasible = torch.stack(select_infeasible_list)  # (batch_size, needNum)
+    select_infeasible = (
+        torch.stack(select_infeasible_list)
+        if all_pref_infeasible is not None
+        else None
+    )  # (batch_size, needNum)
 
     if progress_bar is not None:
         sub_eval_bar.close()

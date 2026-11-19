@@ -2,7 +2,8 @@ import json, os, os.path as op
 from typing import Any, Dict, List, Optional
 import numpy as np
 import matplotlib.pyplot as plt
-import hvwfg, geatpy
+
+from mo_compat import hv_wfg
 
 
 def read_result_dir(
@@ -94,7 +95,7 @@ if __name__ == '__main__':
         hvs = []
         for result in results:
             obj_nd = np.array(result['obj'])
-            hv = hvwfg.wfg(obj_nd, np.array(ref_point))
+            hv = hv_wfg(obj_nd, np.array(ref_point))
             hv_ratio = hv / (ref_point[0] * ref_point[1])
             hvs.append(hv_ratio)
         print(sum(hvs) / len(hvs))

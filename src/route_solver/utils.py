@@ -1,5 +1,20 @@
-from typing import Optional, Tuple
+from contextlib import contextmanager
+from typing import Iterator, Optional, Tuple
 import torch
+
+
+@contextmanager
+def use_default_device(device: torch.device) -> Iterator[None]:
+    """Temporarily set default tensor device for POMO rollout."""
+    if device.type != 'cpu':
+        torch.cuda.set_device(device.index)
+
+    prev_device = torch.get_default_device()
+    torch.set_default_device(device)
+    try:
+        yield
+    finally:
+        torch.set_default_device(prev_device)
 
 
 def zoom(

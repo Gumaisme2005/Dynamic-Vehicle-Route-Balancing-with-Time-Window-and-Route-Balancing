@@ -3,7 +3,6 @@ import platform
 from typing import TYPE_CHECKING, Callable, cast
 import torch
 from torch.utils.data import DataLoader, Dataset
-from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 import torch.utils.data.distributed
 from tqdm import tqdm
@@ -13,7 +12,7 @@ from problem.cvrp import generate_datasets as generate_datasets_cvrp
 from problem.cvrp_balance import generate_datasets as generate_datasets_cvrp_balance
 from problem.tsp import generate_datasets as generate_datasets_tsp
 from route_solver import TspSolver, pretrained_model, zoom
-from utils import log_eval
+from utils import create_summary_writer, log_eval
 
 from .REINFORCE_w_symSB import train_one_batch
 from .REINFORCE_w_symSB_MO import train_one_batch as train_one_batch_mo
@@ -27,7 +26,7 @@ if TYPE_CHECKING:
 
 def train(rank: int, agent: 'Agent') -> None:
     option = agent.option
-    logger = None if option.no_log else SummaryWriter(option.log_dir)
+    logger = None if option.no_log else create_summary_writer(option.log_dir)
 
     if option.distributed:
         device = torch.device('cuda', rank)
@@ -217,7 +216,8 @@ def train(rank: int, agent: 'Agent') -> None:
 
         if not option.no_eval_in_train:
 
-            torch.cuda.empty_cache()
+            if option.use_cuda:
+                torch.cuda.empty_cache()
 
             # if rank == 0: all sub-process need to call eval, otherwise program will get stuck because of SyncBatchNorm
             agent.eval()
@@ -241,7 +241,8 @@ def train(rank: int, agent: 'Agent') -> None:
                     epoch,
                 )
 
-        torch.cuda.empty_cache()
+        if option.use_cuda:
+            torch.cuda.empty_cache()
 
         if option.distributed:
             dist.barrier()

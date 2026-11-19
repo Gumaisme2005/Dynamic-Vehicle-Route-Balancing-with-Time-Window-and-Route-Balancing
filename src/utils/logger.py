@@ -1,13 +1,14 @@
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 import os, json, copy, math
 import torch
-from torch.utils.tensorboard import SummaryWriter
 import numpy as np
-import hvwfg, geatpy
 import itertools
 import matplotlib.pyplot as plt
 
+from .mo_utils import hv_wfg, hv_indicator
+
 if TYPE_CHECKING:
+    from torch.utils.tensorboard import SummaryWriter
     from RL.agent import Agent
 
 
@@ -39,10 +40,10 @@ def cal_hv(
 
         obj: np.ndarray = (-reward.cpu()).numpy()
         if ref_point is not None:
-            hv = hvwfg.wfg(obj.astype(float), ref.astype(float))
+            hv = hv_wfg(obj.astype(float), ref.astype(float))
             hv_ratio = hv / (ref[0] * ref[1])
         else:
-            hv_ratio = geatpy.indicator.HV(obj)
+            hv_ratio = hv_indicator(obj)
         hv_s.append(hv_ratio)
 
     return torch.tensor(hv_s, device=rewards.device)

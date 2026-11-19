@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING, Optional
 import torch
-from torch.utils.tensorboard import SummaryWriter
 
 from utils import augment, clip_grad_norms
 
 if TYPE_CHECKING:
+    from torch.utils.tensorboard import SummaryWriter
     from .agent import Agent
 
 

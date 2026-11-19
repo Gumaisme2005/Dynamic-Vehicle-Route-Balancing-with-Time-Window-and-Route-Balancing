@@ -86,7 +86,7 @@ class CVRPEnv:
     def use_saved_problems(self, filename, device):
         self.FLAG__use_saved_problems = True
 
-        loaded_dict = torch.load(filename, map_location=device)
+        loaded_dict = torch.load(filename, map_location=device, weights_only=False)
         self.saved_depot_xy = loaded_dict['depot_xy']
         self.saved_node_xy = loaded_dict['node_xy']
         self.saved_node_demand = loaded_dict['node_demand']

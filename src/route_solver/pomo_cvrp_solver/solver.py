@@ -3,6 +3,7 @@ import torch
 import os
 
 from ..solver import Solver
+from ..utils import use_default_device
 from .my_CVRPEnv import my_CVRPEnv as Env
 from .CVRPModel import CVRPModel as Model
 
@@ -72,7 +73,9 @@ class CvrpSolver(Solver):
         # Restore
         model_load = tester_params['model_load']
         checkpoint_fullname = '{path}/checkpoint-{epoch}.pt'.format(**model_load)  # type: ignore
-        checkpoint = torch.load(checkpoint_fullname, map_location=device)
+        checkpoint = torch.load(
+            checkpoint_fullname, map_location=device, weights_only=False
+        )
         self.model.load_state_dict(checkpoint['model_state_dict'])
 
     def to_device(self, device: Union[str, torch.device]) -> 'CvrpSolver':
@@ -102,113 +105,110 @@ class CvrpSolver(Solver):
                 torch.zeros((problems.size(0), 1), device=problems.device),
             )
 
-        if self.device.type != 'cpu':
-            torch.cuda.set_device(self.device.index)
-            torch.set_default_tensor_type(torch.cuda.FloatTensor)
-
         assert eval_type in ('softmax', 'argmax')
         self.model.model_params['eval_type'] = eval_type
 
         batch_size, problem_size, _ = problems.size()
         customer_numbers = problem_size - 1
 
-        if problem_size != self.problem_size:
-            self.env_params = {
-                'problem_size': customer_numbers,
-                'pomo_size': customer_numbers,
-            }
-            self.env = Env(**self.env_params)
+        with use_default_device(self.device):
+            if problem_size != self.problem_size:
+                self.env_params = {
+                    'problem_size': customer_numbers,
+                    'pomo_size': customer_numbers,
+                }
+                self.env = Env(**self.env_params)
 
-        # Augmentation
-        ###############################################
-        if self.tester_params['augmentation_enable']:
-            aug_factor = self.tester_params['aug_factor']
-        else:
-            aug_factor = 1
+            # Augmentation
+            ###############################################
+            if self.tester_params['augmentation_enable']:
+                aug_factor = self.tester_params['aug_factor']
+            else:
+                aug_factor = 1
 
-        if mask is not None:
-            assert torch.all(mask[:, 0] == False)
+            if mask is not None:
+                assert torch.all(mask[:, 0] == False)
 
-            mask_for_encoder = mask.repeat(aug_factor, 1)
-            mask_for_decoder = mask_for_encoder.unsqueeze(1).repeat(
-                1, self.env_params['pomo_size'], 1
-            )
-            extra_ninf_mask_for_encoder = torch.zeros(
-                size=(aug_factor * batch_size, problem_size)
-            )
-            extra_ninf_mask_for_decoder = torch.zeros(
-                size=(
-                    aug_factor * batch_size,
-                    self.env_params['pomo_size'],
-                    problem_size,
+                mask_for_encoder = mask.repeat(aug_factor, 1)
+                mask_for_decoder = mask_for_encoder.unsqueeze(1).repeat(
+                    1, self.env_params['pomo_size'], 1
                 )
-            )
-            extra_ninf_mask_for_encoder[mask_for_encoder] = float('-inf')
-            extra_ninf_mask_for_decoder[mask_for_decoder] = float('-inf')
-        else:
-            extra_ninf_mask_for_encoder = None
+                extra_ninf_mask_for_encoder = torch.zeros(
+                    size=(aug_factor * batch_size, problem_size)
+                )
+                extra_ninf_mask_for_decoder = torch.zeros(
+                    size=(
+                        aug_factor * batch_size,
+                        self.env_params['pomo_size'],
+                        problem_size,
+                    )
+                )
+                extra_ninf_mask_for_encoder[mask_for_encoder] = float('-inf')
+                extra_ninf_mask_for_decoder[mask_for_decoder] = float('-inf')
+            else:
+                extra_ninf_mask_for_encoder = None
 
-        # Ready
-        ###############################################
-        self.model.eval()
-        with torch.no_grad():
-            self.env.load_problems(problems, aug_factor)  # type: ignore
-            reset_state, _, _ = self.env.reset()
-            self.model.pre_forward(reset_state, extra_ninf_mask_for_encoder)
+            # Ready
+            ###############################################
+            self.model.eval()
+            with torch.no_grad():
+                self.env.load_problems(problems, aug_factor)  # type: ignore
+                reset_state, _, _ = self.env.reset()
+                self.model.pre_forward(reset_state, extra_ninf_mask_for_encoder)
 
-        if mask is not None:
-            self.env.visited_ninf_flag += extra_ninf_mask_for_decoder
-
-        # trace route
-        route_list = []
-
-        # POMO Rollout
-        ###############################################
-        state, reward, done = self.env.pre_step()
-        while not done:
-            selected, _ = self.model(state)
-            # shape: (batch, pomo)
-            state, reward, done = self.env.step(selected)
+            if mask is not None:
+                self.env.visited_ninf_flag += extra_ninf_mask_for_decoder
 
             # trace route
-            route_list.append(selected)
+            route_list = []
 
-        # trace route
-        route = torch.stack(
-            route_list, dim=-1
-        )  # (augmentation*batch, pomo, node_indexes)
+            # POMO Rollout
+            ###############################################
+            state, reward, done = self.env.pre_step()
+            while not done:
+                selected, _ = self.model(state)
+                # shape: (batch, pomo)
+                state, reward, done = self.env.step(selected)
 
-        # Return
-        ###############################################
-        aug_reward = reward.reshape(aug_factor, batch_size, self.env.pomo_size)
-        # shape: (augmentation, batch, pomo)
+                # trace route
+                route_list.append(selected)
 
-        max_pomo_reward, max_pomo_reward_index = aug_reward.max(
-            dim=2
-        )  # get best results from pomo
-        # shape: (augmentation, batch)
+            # trace route
+            route = torch.stack(
+                route_list, dim=-1
+            )  # (augmentation*batch, pomo, node_indexes)
 
-        # trace route
-        max_pomo_route = route[
-            torch.arange(aug_factor * batch_size), max_pomo_reward_index.reshape(-1), :
-        ]
-        max_pomo_route = max_pomo_route.reshape(
-            aug_factor, batch_size, -1
-        )  # (augmentation, batch, problem_size)
+            # Return
+            ###############################################
+            aug_reward = reward.reshape(aug_factor, batch_size, self.env.pomo_size)
+            # shape: (augmentation, batch, pomo)
 
-        max_aug_pomo_reward, max_aug_pomo_reward_index = max_pomo_reward.max(
-            dim=0
-        )  # get best results from augmentation
-        # shape: (batch,)
+            max_pomo_reward, max_pomo_reward_index = aug_reward.max(
+                dim=2
+            )  # get best results from pomo
+            # shape: (augmentation, batch)
 
-        # trace route
-        max_aug_pomo_route = max_pomo_route[
-            max_aug_pomo_reward_index.reshape(-1), torch.arange(batch_size), :
-        ]
+            # trace route
+            max_pomo_route = route[
+                torch.arange(aug_factor * batch_size),
+                max_pomo_reward_index.reshape(-1),
+                :,
+            ]
+            max_pomo_route = max_pomo_route.reshape(
+                aug_factor, batch_size, -1
+            )  # (augmentation, batch, problem_size)
 
-        # 追踪到的路线结尾可能都有多个连续0的原因是这是从pomo中取的最短路，
-        # 如果没有从pomo中取的话就不会有多个连续0了。
+            max_aug_pomo_reward, max_aug_pomo_reward_index = max_pomo_reward.max(
+                dim=0
+            )  # get best results from augmentation
+            # shape: (batch,)
 
-        torch.set_default_tensor_type(torch.FloatTensor)
+            # trace route
+            max_aug_pomo_route = max_pomo_route[
+                max_aug_pomo_reward_index.reshape(-1), torch.arange(batch_size), :
+            ]
+
+            # 追踪到的路线结尾可能都有多个连续0的原因是这是从pomo中取的最短路，
+            # 如果没有从pomo中取的话就不会有多个连续0了。
 
         return -max_aug_pomo_reward, max_aug_pomo_route

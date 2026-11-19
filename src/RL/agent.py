@@ -4,7 +4,6 @@ from typing import Callable
 from functools import partial
 import torch
 from torch import nn
-from torch.utils.tensorboard import SummaryWriter
 import torch.multiprocessing as mp
 
 from options import Option
@@ -21,7 +20,7 @@ from problem.cvrp_balance import cal_reward_MO, cal_reward_MO_1D
 from problem.cvrp import cal_reward as cal_reward_cvrp
 from problem.tsp import cal_reward_MO_refine as cal_reward_MO_refine_tsp
 
-from utils import get_inner_model, log_eval
+from utils import create_summary_writer, get_inner_model, log_eval
 
 from .train import train
 from .eval import eval
@@ -145,7 +144,9 @@ class Agent:
                 'pre_actor': get_inner_model(self.pre_actor).state_dict(),
                 'optimizer': self.optimizer.state_dict(),
                 'rng_state': torch.get_rng_state(),
-                'cuda_rng_state': torch.cuda.get_rng_state(),
+                'cuda_rng_state': (
+                    torch.cuda.get_rng_state() if self.option.use_cuda else None
+                ),
                 'random_state': random.getstate(),
             },
             os.path.join(self.option.save_dir, 'epoch-{}.pt'.format(epoch)),
@@ -155,7 +156,9 @@ class Agent:
     def load(self) -> None:
         if self.option.load_path is not None:
             print(' [*] Loading data from {}...'.format(self.option.load_path), end='')
-            load_data = torch.load(self.option.load_path, map_location='cpu')
+            load_data = torch.load(
+                self.option.load_path, map_location='cpu', weights_only=False
+            )
 
             get_inner_model(self.actor).load_state_dict(load_data['actor'])
             get_inner_model(self.pre_actor).load_state_dict(load_data['pre_actor'])
@@ -164,11 +167,15 @@ class Agent:
                 self.optimizer.load_state_dict(load_data['optimizer'])
 
                 torch.set_rng_state(load_data['rng_state'])
-                if self.option.use_cuda:
+                if (
+                    self.option.use_cuda
+                    and load_data.get('cuda_rng_state') is not None
+                ):
                     torch.cuda.set_rng_state(load_data['cuda_rng_state'])
                 random.setstate(load_data['random_state'])
 
-            torch.cuda.empty_cache()
+            if self.option.use_cuda:
+                torch.cuda.empty_cache()
 
             print('done.')
 
@@ -191,7 +198,7 @@ class Agent:
         else:
             rewards, infeasible, action, addtion_rewards, time_used = eval(0, self)
 
-        logger = None if self.option.no_log else SummaryWriter(self.option.log_dir)
+        logger = None if self.option.no_log else create_summary_writer(self.option.log_dir)
         log_eval(
             logger,
             self,
