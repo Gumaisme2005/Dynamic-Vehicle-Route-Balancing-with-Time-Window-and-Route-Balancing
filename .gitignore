@@ -2,6 +2,7 @@
 local_only
 datasets
 log
+result
 
 # NN trained model
 saved_*

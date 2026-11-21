@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>E-AM for VRPRB — Web Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-icon">🚚</span>
+      <div>
+        <h1>E-AM for VRPRB</h1>
+        <p>Dashboard quản lý dữ liệu, chạy thử thuật toán &amp; phân tích kết quả</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="tab-datasets">1. Hệ thống &amp; Dữ liệu</button>
+      <button class="tab-btn" data-tab="tab-eam">2. Chạy E-AM <span id="badge-running-eam" class="badge hidden">0</span></button>
+      <button class="tab-btn" data-tab="tab-cmma">3. Chạy CMMA <span id="badge-running-cmma" class="badge hidden">0</span></button>
+      <button class="tab-btn" data-tab="tab-results">4. Kết quả &amp; Lộ trình</button>
+    </nav>
+  </header>
+
+  <main class="container">
+    <!-- TAB 1: SYSTEM & DATASETS -->
+    <section id="tab-datasets" class="tab-panel active">
+      <div class="card">
+        <div class="card-header">
+          <h2>Trạng thái hệ thống &amp; Môi trường</h2>
+          <button id="btn-refresh-status" class="btn btn-secondary btn-sm">Làm mới</button>
+        </div>
+        <div id="system-status-grid" class="metrics-grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Danh sách bộ dữ liệu trong <code>datasets/</code></h2>
+          <div class="actions">
+            <button id="btn-toggle-manage" class="btn btn-primary btn-sm">+ Thêm / Sinh dữ liệu</button>
+            <button id="btn-refresh-datasets" class="btn btn-secondary btn-sm">Tải lại</button>
+          </div>
+        </div>
+
+        <div id="manage-panel" class="manage-panel hidden">
+          <div class="two-col">
+            <div class="subcard">
+              <h3>Tải lên file <code>.npy</code></h3>
+              <p class="muted">Hỗ trợ mảng 3 chiều shape <code>(số_bài_toán, số_node, 2 hoặc 3)</code>.</p>
+              <div class="form-row">
+                <input type="file" id="upload-file" accept=".npy" />
+                <button id="btn-upload" class="btn btn-primary">Lưu vào datasets/</button>
+              </div>
+            </div>
+
+            <div class="subcard">
+              <h3>Sinh dataset CVRP ngẫu nhiên</h3>
+              <div class="form-grid">
+                <label><span>Số khách hàng</span>
+                  <select id="gen-customer-size"></select>
+                </label>
+                <label><span>Số bài toán</span>
+                  <input type="number" id="gen-num-instances" min="1" max="2000" value="20" />
+                </label>
+                <label><span>Số xe</span>
+                  <input type="number" id="gen-vehicle-num" min="2" max="100" value="4" />
+                </label>
+                <label><span>Sức chứa xe (-1 = chuẩn)</span>
+                  <input type="number" id="gen-capacity" value="-1" />
+                </label>
+                <label><span>Seed</span>
+                  <input type="number" id="gen-seed" min="0" value="1234" />
+                </label>
+                <label><span>Tên file lưu</span>
+                  <input type="text" id="gen-filename" value="custom_cvrp20-v4.npy" />
+                </label>
+              </div>
+              <button id="btn-generate" class="btn btn-primary">Sinh &amp; Lưu dataset</button>
+            </div>
+          </div>
+          <div id="manage-feedback" class="feedback"></div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="datasets-table">
+            <thead>
+              <tr>
+                <th>Tên file</th>
+                <th>Loại</th>
+                <th>Số bài toán</th>
+                <th>Khách hàng</th>
+                <th>Xe gợi ý</th>
+                <th>Auto Zoom</th>
+                <th>Shape</th>
+                <th>Dung lượng</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Kiểm tra chi tiết &amp; Xem trước bài toán</h2>
+        </div>
+
+        <div class="inspector-controls">
+          <label class="grow">
+            <span>Bộ dữ liệu</span>
+            <select id="select-dataset"></select>
+          </label>
+          <label>
+            <span>Chỉ số bài toán (<code>problem_index</code>)</span>
+            <div class="range-row">
+              <input type="range" id="instance-slider" min="0" max="0" value="0" />
+              <input type="number" id="instance-index" min="0" max="0" value="0" />
+            </div>
+          </label>
+          <div class="toggles">
+            <label class="check"><input type="checkbox" id="chk-zoom" /> Chuẩn hóa tọa độ (Zoom)</label>
+            <label class="check"><input type="checkbox" id="chk-ids" checked /> Hiện ID node</label>
+            <label class="check"><input type="checkbox" id="chk-demands" /> Hiện demand</label>
+          </div>
+        </div>
+
+        <div id="dataset-summary-metrics" class="metrics-grid compact"></div>
+        <div id="dataset-alerts"></div>
+
+        <div class="two-col preview-layout">
+          <div class="subcard">
+            <div class="subcard-header">
+              <h3 id="map-title">Bản đồ phân bố Depot &amp; Khách hàng</h3>
+              <span id="hover-info" class="muted">Rê chuột lên điểm để xem chi tiết</span>
+            </div>
+            <div class="canvas-box">
+              <canvas id="map-canvas" width="640" height="560"></canvas>
+            </div>
+            <div class="legend-row">
+              <span><i class="dot depot"></i> Depot (Node 0)</span>
+              <span><i class="dot cust-low"></i> Khách hàng (Demand thấp → cao)</span>
+              <span id="zoom-badge" class="badge badge-dark hidden"></span>
+            </div>
+          </div>
+
+          <div class="subcard">
+            <h3>Thông tin bài toán &amp; Bảng Node</h3>
+            <div id="instance-stats" class="instance-stats"></div>
+            <div id="hist-wrap" class="hist-wrap hidden">
+              <h4>Phân phối tổng demand toàn bộ dữ liệu</h4>
+              <canvas id="hist-canvas" width="480" height="150"></canvas>
+            </div>
+            <div class="table-wrap node-table-wrap">
+              <table id="nodes-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Vai trò</th>
+                    <th>X</th>
+                    <th>Y</th>
+                    <th>Demand</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="cli-box">
+          <h3>Lệnh CLI gợi ý tương ứng</h3>
+          <div class="two-col">
+            <div>
+              <div class="cli-label">
+                <span>Đánh giá E-AM (<code>src/main.py</code>)</span>
+                <button class="btn btn-secondary btn-xs copy-btn" data-target="cli-eam">Copy</button>
+              </div>
+              <pre id="cli-eam"></pre>
+            </div>
+            <div>
+              <div class="cli-label">
+                <span>Chạy Baseline CMMA (<code>src-CMMA/main.py</code>)</span>
+                <button class="btn btn-secondary btn-xs copy-btn" data-target="cli-cmma">Copy</button>
+              </div>
+              <pre id="cli-cmma"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: RUN E-AM -->
+    <section id="tab-eam" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Chạy thử &amp; Huấn luyện mô hình E-AM (<code>src/main.py</code>)</h2>
+            <p class="muted" style="margin:2px 0 0">Cấu hình bằng menu, xem trước câu lệnh thực thi và theo dõi log trực tiếp.</p>
+          </div>
+          <div class="actions">
+            <span id="tb-status-pill" class="pill pill-idle">TensorBoard: Đang tắt</span>
+            <button id="btn-tb-toggle" class="btn btn-secondary btn-sm">Bật TensorBoard</button>
+            <a id="tb-link" href="http://127.0.0.1:6006" target="_blank" class="btn btn-secondary btn-sm hidden">Mở TensorBoard ↗</a>
+          </div>
+        </div>
+
+        <div class="mode-switch">
+          <button id="btn-mode-train" class="mode-btn active">Huấn luyện (Train)</button>
+          <button id="btn-mode-eval" class="mode-btn">Đánh giá (--eval_only)</button>
+        </div>
+
+        <!-- TRAIN FORM -->
+        <div id="eam-train-panel">
+          <div class="preset-bar">
+            <span class="muted">Preset nhanh:</span>
+            <button class="btn btn-secondary btn-xs" data-preset="train_quick">Chạy thử nhanh (20 khách, 3 epoch)</button>
+            <button class="btn btn-secondary btn-xs" data-preset="train_20">Chuẩn 20 khách - 4 xe</button>
+            <button class="btn btn-secondary btn-xs" data-preset="train_50">Chuẩn 50 khách - 7 xe</button>
+            <button class="btn btn-secondary btn-xs" data-preset="train_100">Chuẩn 100 khách - 11 xe (GPU 8GB)</button>
+          </div>
+
+          <div class="form-grid-4">
+            <label><span>Bài toán (<code>--problem</code>)</span>
+              <select id="tr-problem">
+                <option value="mo_cvrp" selected>mo_cvrp (VRPRB chuẩn)</option>
+                <option value="mo_cvrp_re_tsp">mo_cvrp_re_tsp (kèm POMO TSP)</option>
+                <option value="mo_cvrp_baseline">mo_cvrp_baseline (1D)</option>
+                <option value="cvrp">cvrp (đơn mục tiêu)</option>
+                <option value="cvrp_max">cvrp_max</option>
+                <option value="mo_tsp">mo_tsp</option>
+                <option value="mo_tsp_re_tsp">mo_tsp_re_tsp</option>
+                <option value="tsp_max">tsp_max</option>
+              </select>
+            </label>
+            <label><span>Số khách hàng</span>
+              <input type="number" id="tr-customer-size" min="10" max="1000" value="20" />
+            </label>
+            <label><span>Số xe</span>
+              <input type="number" id="tr-vehicle-num" min="2" max="100" value="4" />
+            </label>
+            <label><span>Batch size</span>
+              <input type="number" id="tr-batch-size" min="1" value="256" />
+            </label>
+            <label><span>Số bài/epoch (<code>--epoch_size</code>)</span>
+              <input type="number" id="tr-epoch-size" min="1" value="2560" />
+            </label>
+            <label><span>Tổng số epoch (<code>--epoch_end</code>)</span>
+              <input type="number" id="tr-epoch-end" min="1" value="3" />
+            </label>
+            <label><span>Hàm gộp đa mục tiêu</span>
+              <select id="tr-mo-reward">
+                <option value="tch" selected>tch (Weighted Tchebycheff)</option>
+                <option value="ws">ws (Weighted Sum)</option>
+              </select>
+            </label>
+            <label><span>Learning rate</span>
+              <input type="number" id="tr-lr" step="0.00001" value="0.0001" />
+            </label>
+            <label><span>Tập validation</span>
+              <select id="tr-val-dataset"></select>
+            </label>
+            <label><span>Khoảng val (start - end)</span>
+              <div class="two-inputs">
+                <input type="number" id="tr-val-start" min="0" value="0" />
+                <input type="number" id="tr-val-end" min="1" value="200" />
+              </div>
+            </label>
+            <label><span>Val batch size</span>
+              <input type="number" id="tr-val-batch" min="1" value="100" />
+            </label>
+            <label><span>Chế độ eval cuối epoch</span>
+              <select id="tr-eval-type">
+                <option value="pareto" selected>pareto</option>
+                <option value="pareto_sample">pareto_sample</option>
+                <option value="greedy_aug">greedy_aug</option>
+                <option value="greedy">greedy</option>
+              </select>
+            </label>
+            <label><span>Resume checkpoint (tùy chọn)</span>
+              <select id="tr-resume"></select>
+            </label>
+            <label><span>Tên run (<code>--run_name</code>)</span>
+              <input type="text" id="tr-run-name" value="web_test_20_v4" />
+            </label>
+          </div>
+          <div class="toggles" style="margin-top:8px">
+            <label class="check"><input type="checkbox" id="tr-quick-eval" checked /> Quick eval (11 trọng số)</label>
+            <label class="check"><input type="checkbox" id="tr-no-eval" /> Tắt eval khi train</label>
+            <label class="check"><input type="checkbox" id="tr-no-cuda" /> Chỉ chạy CPU (--no_cuda)</label>
+            <label class="check"><input type="checkbox" id="tr-no-log" /> Tắt TensorBoard log (--no_log)</label>
+            <label class="check"><input type="checkbox" id="tr-no-save" /> Không lưu checkpoint (--no_save)</label>
+          </div>
+        </div>
+
+        <!-- EVAL FORM -->
+        <div id="eam-eval-panel" class="hidden">
+          <div class="actions" style="margin-bottom:10px">
+            <button id="btn-refresh-ckpts" class="btn btn-secondary btn-xs">Làm mới danh sách checkpoint</button>
+            <span id="pomo-status-text" class="muted"></span>
+          </div>
+          <div class="form-grid-4">
+            <label class="span-2"><span>Checkpoint mô hình (<code>--load_path</code>)</span>
+              <select id="ev-load-path"></select>
+            </label>
+            <label><span>Bài toán (<code>--problem</code>)</span>
+              <select id="ev-problem">
+                <option value="mo_cvrp" selected>mo_cvrp</option>
+                <option value="mo_cvrp_re_tsp">mo_cvrp_re_tsp</option>
+                <option value="mo_cvrp_baseline">mo_cvrp_baseline</option>
+                <option value="cvrp">cvrp</option>
+                <option value="cvrp_max">cvrp_max</option>
+                <option value="mo_tsp">mo_tsp</option>
+              </select>
+            </label>
+            <label><span>Số khách / xe lúc train</span>
+              <div class="two-inputs">
+                <input type="number" id="ev-customer-size" min="10" value="20" title="customer_size" />
+                <input type="number" id="ev-vehicle-num" min="2" value="4" title="vehicle_num" />
+              </div>
+            </label>
+            <label><span>Dataset đánh giá (<code>--val_dataset</code>)</span>
+              <select id="ev-val-dataset"></select>
+            </label>
+            <label><span>Số khách / xe khi eval</span>
+              <div class="two-inputs">
+                <input type="number" id="ev-val-customer-size" min="10" value="20" title="val_customer_size" />
+                <input type="number" id="ev-val-vehicle-num" min="2" value="4" title="val_vehicle_num" />
+              </div>
+            </label>
+            <label><span>Khoảng đánh giá (start - end)</span>
+              <div class="two-inputs">
+                <input type="number" id="ev-val-start" min="0" value="0" />
+                <input type="number" id="ev-val-end" min="1" value="200" />
+              </div>
+            </label>
+            <label><span>Val batch size</span>
+              <input type="number" id="ev-val-batch" min="1" value="100" />
+            </label>
+            <label><span>Kiểu đánh giá (<code>--eval_type</code>)</span>
+              <select id="ev-eval-type">
+                <option value="pareto_sample" selected>pareto_sample</option>
+                <option value="pareto">pareto</option>
+                <option value="greedy_aug">greedy_aug</option>
+                <option value="sample">sample</option>
+                <option value="greedy">greedy</option>
+              </select>
+            </label>
+            <label><span>Sample times</span>
+              <input type="number" id="ev-sample-times" min="0" value="32" />
+            </label>
+            <label><span>Max parallel (VRAM)</span>
+              <input type="number" id="ev-max-parallel" min="1" value="16384" title="Tăng để chạy GPU nhanh hơn, giảm nếu thiếu VRAM" />
+            </label>
+            <label><span>Zoom</span>
+              <select id="ev-zoom">
+                <option value="auto" selected>auto</option>
+                <option value="on">on</option>
+                <option value="off">off</option>
+              </select>
+            </label>
+            <label><span>Tên run (<code>--run_name</code>)</span>
+              <input type="text" id="ev-run-name" value="web_eval" />
+            </label>
+          </div>
+          <div class="toggles" style="margin-top:8px">
+            <label class="check"><input type="checkbox" id="ev-quick-eval" /> Quick eval (11 trọng số)</label>
+            <label class="check"><input type="checkbox" id="ev-no-cuda" /> Chỉ chạy CPU (--no_cuda)</label>
+            <label class="check"><input type="checkbox" id="ev-no-log" checked /> Tắt TensorBoard log (--no_log)</label>
+          </div>
+        </div>
+
+        <div class="runner-bar">
+          <div id="eam-validation-msg"></div>
+          <div class="cli-label">
+            <span>Lệnh sẽ thực thi</span>
+            <button class="btn btn-secondary btn-xs copy-btn" data-target="eam-cmd-preview">Copy</button>
+          </div>
+          <pre id="eam-cmd-preview"></pre>
+          <div class="runner-actions">
+            <button id="btn-run-eam" class="btn btn-primary">▶ Chạy E-AM</button>
+            <button id="btn-stop-eam" class="btn btn-danger" disabled>■ Dừng ngay (Stop)</button>
+            <span id="eam-active-status" class="pill pill-idle">Chưa chạy</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="two-col runner-bottom">
+        <div class="card">
+          <div class="card-header">
+            <h2>Log trực tiếp (E-AM)</h2>
+            <div class="actions">
+              <label class="check"><input type="checkbox" id="eam-autoscroll" checked /> Tự cuộn xuống cuối</label>
+              <button id="btn-clear-eam-log" class="btn btn-secondary btn-xs">Xóa log</button>
+            </div>
+          </div>
+          <div id="eam-progress-wrap" class="progress-banner hidden">
+            <div class="progress-track"><div id="eam-progress-fill" class="progress-fill" style="width:0%"></div></div>
+            <div id="eam-progress-text" class="progress-text"></div>
+          </div>
+          <pre id="eam-log-console" class="log-console">Chưa có log. Bấm "▶ Chạy E-AM" để bắt đầu...</pre>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h2>Lịch sử Job E-AM</h2>
+            <button id="btn-refresh-jobs-eam" class="btn btn-secondary btn-xs">Làm mới</button>
+          </div>
+          <div id="eam-jobs-list" class="jobs-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: RUN CMMA -->
+    <section id="tab-cmma" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Chạy Baseline CMMA (<code>src-CMMA/main.py</code>)</h2>
+            <p class="muted" style="margin:2px 0 0">Thuật toán tiến hóa Memetic trên CPU cho từng bài toán đơn lẻ.</p>
+          </div>
+        </div>
+
+        <div class="preset-bar">
+          <span class="muted">Preset nhanh:</span>
+          <button class="btn btn-secondary btn-xs" data-cmma-preset="quick">Thử nhanh (pop=50, 200 gen)</button>
+          <button class="btn btn-secondary btn-xs" data-cmma-preset="medium">Trung bình (pop=100, 1000 gen)</button>
+          <button class="btn btn-secondary btn-xs" data-cmma-preset="full">Đầy đủ (pop=100, 10000 gen)</button>
+        </div>
+
+        <div class="form-grid-4">
+          <label><span>Dataset (<code>--load_file</code>)</span>
+            <select id="cm-load-file"></select>
+          </label>
+          <label><span>Chỉ số bài toán (<code>--problem_index</code>)</span>
+            <input type="number" id="cm-problem-index" min="0" value="0" />
+          </label>
+          <label><span>Số xe (<code>--vehicle_num</code>)</span>
+            <input type="number" id="cm-vehicle-num" min="2" value="4" />
+          </label>
+          <label><span>Kích thước quần thể (số chẵn)</span>
+            <input type="number" id="cm-pop-size" min="2" step="2" value="50" />
+          </label>
+          <label><span>Số thế hệ (<code>--N_gen</code>)</span>
+            <input type="number" id="cm-n-gen" min="1" value="200" />
+          </label>
+          <label><span>Lưu mỗi N thế hệ</span>
+            <input type="number" id="cm-save-per-gen" min="1" value="50" />
+          </label>
+          <label><span>Iter / LS_iter</span>
+            <div class="two-inputs">
+              <input type="number" id="cm-iter" min="1" value="40" title="Iter" />
+              <input type="number" id="cm-ls-iter" min="1" value="300" title="LS_iter" />
+            </div>
+          </label>
+          <label><span>Ref point (sum / max)</span>
+            <div class="two-inputs">
+              <input type="number" id="cm-ref-0" step="0.1" value="30" />
+              <input type="number" id="cm-ref-1" step="0.1" value="3" />
+            </div>
+          </label>
+          <label><span>Seed</span>
+            <input type="number" id="cm-seed" min="0" value="0" />
+          </label>
+          <label><span>Tên run (<code>--run_name</code>)</span>
+            <input type="text" id="cm-run-name" value="web_cmma" />
+          </label>
+        </div>
+        <div class="toggles" style="margin-top:8px">
+          <label class="check"><input type="checkbox" id="cm-use-ref" checked /> Dùng ref_point tính HV</label>
+          <label class="check"><input type="checkbox" id="cm-no-log" /> Tắt ghi log.txt (--no_log)</label>
+        </div>
+
+        <div class="runner-bar">
+          <div id="cmma-validation-msg"></div>
+          <div class="cli-label">
+            <span>Lệnh sẽ thực thi</span>
+            <button class="btn btn-secondary btn-xs copy-btn" data-target="cmma-cmd-preview">Copy</button>
+          </div>
+          <pre id="cmma-cmd-preview"></pre>
+          <div class="runner-actions">
+            <button id="btn-run-cmma" class="btn btn-primary">▶ Chạy CMMA</button>
+            <button id="btn-stop-cmma" class="btn btn-danger" disabled>■ Dừng ngay (Stop)</button>
+            <span id="cmma-active-status" class="pill pill-idle">Chưa chạy</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="two-col runner-bottom">
+        <div class="card">
+          <div class="card-header">
+            <h2>Log trực tiếp (CMMA)</h2>
+            <div class="actions">
+              <label class="check"><input type="checkbox" id="cmma-autoscroll" checked /> Tự cuộn xuống cuối</label>
+              <button id="btn-clear-cmma-log" class="btn btn-secondary btn-xs">Xóa log</button>
+            </div>
+          </div>
+          <div id="cmma-progress-wrap" class="progress-banner hidden">
+            <div class="progress-track"><div id="cmma-progress-fill" class="progress-fill" style="width:0%"></div></div>
+            <div id="cmma-progress-text" class="progress-text"></div>
+          </div>
+          <pre id="cmma-log-console" class="log-console">Chưa có log. Bấm "▶ Chạy CMMA" để bắt đầu...</pre>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h2>Lịch sử Job CMMA</h2>
+            <button id="btn-refresh-jobs-cmma" class="btn btn-secondary btn-xs">Làm mới</button>
+          </div>
+          <div id="cmma-jobs-list" class="jobs-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: RESULTS, PARETO COMPARE & ROUTE VISUALIZER -->
+    <section id="tab-results" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Xem, So sánh Mặt Pareto &amp; Trực quan hóa Lộ trình Xe</h2>
+            <p class="muted" style="margin:2px 0 0">Đọc kết quả từ <code>saved_model/</code> (E-AM <code>--eval_only</code>) và <code>result/</code> (CMMA).</p>
+          </div>
+          <div class="actions">
+            <button id="btn-refresh-results" class="btn btn-secondary btn-sm">Làm mới kết quả</button>
+          </div>
+        </div>
+
+        <div id="results-empty-notice" class="hidden"></div>
+
+        <div id="results-controls-wrap">
+          <div class="form-grid-4">
+            <label class="span-2"><span>Kết quả chính (A)</span>
+              <select id="res-select-a"></select>
+            </label>
+            <label><span>Thế hệ (CMMA) / Bài toán thứ</span>
+              <div class="two-inputs">
+                <select id="res-gen-a"></select>
+                <input type="number" id="res-inst-a" min="0" value="0" title="instance_offset" />
+              </div>
+            </label>
+            <label><span>So sánh với (B - tùy chọn)</span>
+              <select id="res-select-b"></select>
+            </label>
+          </div>
+
+          <div id="res-b-subcontrols" class="actions hidden" style="margin-top:10px">
+            <label style="min-width:160px"><span>Thế hệ của B (nếu CMMA)</span>
+              <select id="res-gen-b"></select>
+            </label>
+            <label style="width:140px"><span>Bài toán thứ (B)</span>
+              <input type="number" id="res-inst-b" min="0" value="0" />
+            </label>
+          </div>
+
+          <div id="res-metrics-grid" class="metrics-grid compact"></div>
+          <div id="res-compare-table-wrap" class="table-wrap hidden" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <div id="res-viz-wrap" class="two-col">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Mặt Pareto (Min-Sum vs Min-Max)</h2>
+              <span id="pareto-hover-info" class="muted">Click vào một điểm của A trên đồ thị để vẽ lộ trình xe</span>
+            </div>
+            <label class="check"><input type="checkbox" id="chk-only-nd" /> Chỉ hiện nghiệm không bị trội</label>
+          </div>
+
+          <div class="preset-bar">
+            <span class="muted">Chọn nhanh nghiệm của A:</span>
+            <button id="btn-pick-min-sum" class="btn btn-secondary btn-xs">🏆 Tổng đường ngắn nhất (Min f₁)</button>
+            <button id="btn-pick-min-max" class="btn btn-secondary btn-xs">⚖️ Cân bằng nhất (Min f₂)</button>
+            <button id="btn-pick-knee" class="btn btn-secondary btn-xs">🎯 Cân đối (Knee)</button>
+            <select id="res-sol-select" style="width:auto; min-width:180px"></select>
+          </div>
+
+          <div class="canvas-box">
+            <canvas id="pareto-canvas" width="600" height="440"></canvas>
+          </div>
+
+          <div class="legend-row">
+            <span><i class="dot" style="background:#2563eb"></i> Kết quả A</span>
+            <span id="legend-b" class="hidden"><i class="dot" style="background:#f97316"></i> Kết quả B (so sánh)</span>
+            <span><i class="dot" style="background:#dc2626"></i> Nghiệm đang chọn</span>
+          </div>
+
+          <div id="hv-history-wrap" class="hist-wrap hidden" style="margin-top:12px">
+            <h4>Đường cong hội tụ Hypervolume qua các thế hệ (CMMA)</h4>
+            <canvas id="hv-canvas" width="560" height="140"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 id="route-map-title">Bản đồ Lộ trình Xe</h2>
+              <span id="route-hover-info" class="muted">Click vào dòng xe bên dưới để làm nổi bật riêng xe đó</span>
+            </div>
+            <div class="toggles">
+              <label class="check"><input type="checkbox" id="chk-route-ids" checked /> Hiện ID node</label>
+              <button id="btn-clear-veh-highlight" class="btn btn-secondary btn-xs hidden">Hiện tất cả xe</button>
+            </div>
+          </div>
+
+          <div id="route-summary-bar" class="instance-stats"></div>
+
+          <div class="canvas-box">
+            <canvas id="route-canvas" width="600" height="440"></canvas>
+          </div>
+
+          <div class="table-wrap" style="margin-top:12px; max-height:240px">
+            <table id="vehicles-table">
+              <thead>
+                <tr>
+                  <th>Xe</th>
+                  <th>Số khách</th>
+                  <th>Quãng đường</th>
+                  <th>Cân bằng tải</th>
+                  <th>Demand</th>
+                  <th>Lộ trình (0 → ... → 0)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="res-raw-card" class="card hidden">
+        <div class="card-header">
+          <h2>Chi tiết log / <code>eval.txt</code></h2>
+        </div>
+        <pre id="res-raw-text" class="log-console" style="height:180px"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

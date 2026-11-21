@@ -9,6 +9,7 @@ Hệ thống tối ưu đồng thời **2 mục tiêu**:
 ### Cấu trúc thư mục chính
 * `src/`: Mô hình Học tăng cường sâu **E-AM** (Extended Attention Model với Hypernetwork, Vehicle Context Encoder, 2D Cross-Probability Decoder và tùy chọn tinh chỉnh tuyến con bằng POMO TSP).
 * `src-CMMA/`: Thuật toán tiến hóa Memetic đa mục tiêu (**CMMA**) chạy trên CPU làm baseline đối chiếu.
+* `web/`: Giao diện Web Dashboard (`FastAPI` + `HTML/CSS/JS`) điều khiển chạy/dừng thuật toán và trực quan hóa dữ liệu, Pareto Front, lộ trình xe.
 * `datasets/`: Thư mục chứa dữ liệu đánh giá `.npy` (tải từ Releases).
 * `saved_model/`: Thư mục lưu checkpoint mô hình (`.pt`) và kết quả đánh giá (`eval.txt`, `objv.json`, `action.json`, `pareto_front*.png`).
 * `log/`: Thư mục lưu log cho TensorBoard.
@@ -29,6 +30,7 @@ Mã nguồn đã được nâng cấp để chạy tương thích trên **Python
 | **`tqdm`** | Thanh tiến trình khi train và eval | `src/` |
 | **`matplotlib`** | Vẽ và lưu đồ thị mặt Pareto (`.png`) | `src/` và `src-CMMA/analyse_result.py` |
 | **`tensorboard`** | Ghi log và trực quan hóa quá trình train (`SummaryWriter`) | `src/` *(tùy chọn nếu truyền `--no_log`)* |
+| **`fastapi`**, **`uvicorn`** | Chạy giao diện Web Dashboard (`web/server.py`) | `web/` *(chỉ cần nếu dùng Web UI)* |
 
 ### 1.2. Khởi tạo môi trường ảo `.venv`
 Mở PowerShell tại thư mục gốc của dự án (`E-AM-for-VRPRB`):
@@ -68,9 +70,9 @@ Mở PowerShell tại thư mục gốc của dự án (`E-AM-for-VRPRB`):
 
 3. **Cài các thư viện còn lại**:
    ```powershell
-   uv pip install --python .\.venv\Scripts\python.exe numpy tqdm matplotlib tensorboard
+   uv pip install --python .\.venv\Scripts\python.exe numpy tqdm matplotlib tensorboard fastapi uvicorn
    ```
-   *(Hoặc dùng `pip`: `.\.venv\Scripts\python.exe -m pip install numpy tqdm matplotlib tensorboard`)*
+   *(Hoặc dùng `pip`: `.\.venv\Scripts\python.exe -m pip install numpy tqdm matplotlib tensorboard fastapi uvicorn`)*
 
 4. **Kiểm tra lại cài đặt**:
    ```powershell
@@ -114,11 +116,29 @@ Sau khi giải nén, thư mục `.\datasets\` sẽ gồm **19 file**:
 
 ---
 
-## Bước 3: Chạy thử nhanh (Quick Start)
+## Bước 3 (Khuyên dùng): Chạy qua Giao diện Web Dashboard
+
+Thay vì gõ câu lệnh dòng lệnh dài dòng, bạn có thể mở giao diện Web Dashboard tại `http://127.0.0.1:8000` bằng một trong các cách sau:
+
+* **Cách 1 (1-click trên Windows)**: Double-click vào file `run_web.bat` (hoặc chạy `.\run_web.ps1` trong PowerShell) — tự động khởi chạy server và mở trình duyệt.
+* **Cách 2 (Chạy thủ công)**:
+  ```powershell
+  .\.venv\Scripts\python.exe -m web.server --port 8000
+  ```
+
+### Các tab chức năng trên Web Dashboard
+1. **`1. Hệ thống & Dữ liệu`**: Kiểm tra Python/PyTorch/GPU, quét toàn bộ `.npy` trong `datasets/`, xem phân phối demand, tải lên/sinh mới dataset, và vẽ trực quan vị trí Depot + khách hàng.
+2. **`2. Chạy E-AM`**: Chạy **Huấn luyện** (có sẵn Preset *Chạy thử nhanh 3 epoch*, *20/50/100 khách*) hoặc **Đánh giá (`--eval_only`)** với checkpoint `.pt`, xem trước lệnh CLI, thanh tiến độ `%` và Terminal Log realtime, nút **Dừng ngay (Stop)** và nút bật/tắt **TensorBoard**. *(Mẹo: để `Max parallel` cao — ví dụ `16384` cho 20 khách, `4096` cho 50 khách — sẽ giúp Eval trên GPU nhanh gấp 5–6 lần so với `256`.)*
+3. **`3. Chạy CMMA`**: Chọn file `.npy` và `problem_index`, chạy baseline CMMA với Preset `200 / 1000 / 10000` thế hệ, theo dõi log và dừng bất cứ lúc nào.
+4. **`4. Kết quả & Lộ trình`**: Vẽ mặt Pareto tương tác (click thẳng vào điểm nghiệm bất kỳ hoặc chọn nhanh `Min f₁`, `Min f₂`, `Knee`), so sánh 2 mặt Pareto (E-AM vs CMMA) trên cùng biểu đồ, và vẽ bản đồ lộ trình chi tiết của từng xe.
+
+---
+
+## Bước 4: Chạy thử nhanh bằng dòng lệnh (Quick Start CLI)
 
 Để kiểm tra code hoạt động trơn tru trên máy trước khi chạy huấn luyện dài, hãy chạy thử với bộ dữ liệu nhỏ **`datasets/cvrp20-v4.npy`**.
 
-### 3.1. Chạy thử huấn luyện E-AM (3 epoch, vài phút)
+### 4.1. Chạy thử huấn luyện E-AM (3 epoch, vài phút)
 Lệnh dưới đây huấn luyện nhanh 3 epoch (mỗi epoch 2560 bài toán ngẫu nhiên) và tự đánh giá trên toàn bộ 200 bài toán của `datasets/cvrp20-v4.npy`:
 
 ```powershell
@@ -139,7 +159,7 @@ Lệnh dưới đây huấn luyện nhanh 3 epoch (mỗi epoch 2560 bài toán n
 
 *Sau khi chạy xong, checkpoint được lưu tại `saved_model\mo_cvrp_20-v4\test_20_v4_<thoi_gian>\epoch-2.pt`.*
 
-### 3.2. Chạy thử đánh giá E-AM (`--eval_only`)
+### 4.2. Chạy thử đánh giá E-AM (`--eval_only`)
 Dùng file `epoch-2.pt` vừa tạo (hoặc pre-trained model tải từ [Releases](https://github.com/dtkon/E-AM-for-VRPRB/releases)) để đánh giá chi tiết với 101 vector sở thích (`pareto_sample`):
 
 ```powershell
@@ -157,7 +177,7 @@ Dùng file `epoch-2.pt` vừa tạo (hoặc pre-trained model tải từ [Releas
   --load_path "saved_model\mo_cvrp_20-v4\<thu_muc_run>\epoch-2.pt"
 ```
 
-### 3.3. Chạy thử thuật toán baseline CMMA (`src-CMMA/main.py`)
+### 4.3. Chạy thử thuật toán baseline CMMA (`src-CMMA/main.py`)
 Chạy thử CMMA trên bài toán đầu tiên (`--problem_index 0`) của `datasets/cvrp20-v4.npy` trong 200 thế hệ:
 
 ```powershell
@@ -173,9 +193,9 @@ Chạy thử CMMA trên bài toán đầu tiên (`--problem_index 0`) của `dat
 
 ---
 
-## Bước 4: Huấn luyện & Đánh giá đầy đủ
+## Chạy huấn luyện & Đánh giá đầy đủ (CLI)
 
-### 4.1. Huấn luyện đầy đủ E-AM (`200` epochs, `128000` bài toán/epoch)
+### 5.1. Huấn luyện đầy đủ E-AM (`200` epochs, `128000` bài toán/epoch)
 
 * **20 khách, 4 xe**:
   ```powershell
@@ -200,7 +220,7 @@ Chạy thử CMMA trên bài toán đầu tiên (`--problem_index 0`) của `dat
 
 *(Lưu ý quy tắc chia hết trong `src/options.py`: `epoch_size % batch_size == 0` và `(val_range[1] - val_range[0]) % val_batch_size == 0`. Khi dùng `--val_dataset random`, nhớ truyền thêm `--zoom off`.)*
 
-### 4.2. Đánh giá nâng cao (Cross-size & Benchmark VRPLIB)
+### 5.2. Đánh giá nâng cao (Cross-size & Benchmark VRPLIB)
 
 * **Đánh giá trên 200 bài toán 100 khách, 11 xe**:
   ```powershell
@@ -216,7 +236,7 @@ Chạy thử CMMA trên bài toán đầu tiên (`--problem_index 0`) của `dat
   .\.venv\Scripts\python.exe .\src\main.py --eval_only --no_log --problem mo_cvrp --customer_size 50 --vehicle_num 5 --val_range 0 1 --val_batch_size 1 --val_dataset "datasets/p1 E51-05e.npy" --eval_type pareto_sample --sample_times 32 --load_path "<duong_dan_model_50.pt>"
   ```
 
-### 4.3. Chạy CMMA đầy đủ cho `p1..p7` hoặc hàng loạt
+### 5.3. Chạy CMMA đầy đủ cho `p1..p7` hoặc hàng loạt
 * Với `p1..p7` (tên file không chứa `-v<số>.` nên bắt buộc truyền `--vehicle_num`):
   ```powershell
   .\.venv\Scripts\python.exe .\src-CMMA\main.py --load_file "datasets/p1 E51-05e.npy" --problem_index 0 --vehicle_num 5 --N_gen 1000 --save_per_gen 100
@@ -228,9 +248,9 @@ Chạy thử CMMA trên bài toán đầu tiên (`--problem_index 0`) của `dat
 
 ---
 
-## Bước 5: Cách xem và đọc hiểu kết quả
+## Cách xem và đọc hiểu kết quả (CLI & TensorBoard)
 
-### 5.1. Theo dõi trực quan bằng TensorBoard (cho `src/`)
+### 6.1. Theo dõi trực quan bằng TensorBoard (cho `src/`)
 Trong khi train hoặc sau khi chạy xong (khi không dùng `--no_log`), mở một terminal mới tại thư mục gốc và chạy:
 
 ```powershell
@@ -249,7 +269,7 @@ Mở trình duyệt vào `http://localhost:6006`, các mục cần chú ý:
   * `evaluating/pareto_front`: Biểu đồ mặt Pareto trung bình của toàn tập validation.
   * `evaluating/pareto_front_<idx>`: Biểu đồ mặt Pareto của từng bài toán đầu tiên (số lượng do `--pareto_log_num` quy định).
 
-### 5.2. Xem các file kết quả của E-AM trên ổ đĩa
+### 6.2. Xem các file kết quả của E-AM trên ổ đĩa
 Kết quả mỗi lần chạy được lưu tại `saved_model\<problem>_<N>-v<V>\<run_name>\`:
 * `option.json`: Toàn bộ siêu tham số đã dùng.
 * `epoch-<k>.pt`: Checkpoint tại epoch `k`.
@@ -263,7 +283,7 @@ Bạn có thể kiểm tra nhanh số liệu từ `objv.json` và `action.json` 
 .\.venv\Scripts\python.exe -c "import json; obj = json.load(open(r'saved_model\mo_cvrp_20-v4\<run_dir>\objv.json')); act = json.load(open(r'saved_model\mo_cvrp_20-v4\<run_dir>\action.json')); print('Số bài toán:', len(obj), '| Số nghiệm/bài:', len(obj[0])); print('Nghiệm 0 bài 0 (sum, max):', obj[0][0]); print('Lộ trình các xe:', act[0][0])"
 ```
 
-### 5.3. Xem kết quả của CMMA (`src-CMMA/`)
+### 6.3. Xem kết quả của CMMA (`src-CMMA/`)
 Kết quả được lưu tại `result\<ten_dataset>\p<index>_<run_name>\`:
 * `log.txt`: Log tiến độ và `HV` qua từng mốc thế hệ.
 * `value-<gen>.json`: Chứa `obj` (các cặp `[tổng quãng đường, quãng đường max]`), `ref`, và `hv` tại thế hệ `<gen>`.
@@ -275,7 +295,7 @@ Kết quả được lưu tại `result\<ten_dataset>\p<index>_<run_name>\`:
 
 ---
 
-## 6. Tra cứu toàn bộ tham số dòng lệnh
+## 7. Tra cứu toàn bộ tham số dòng lệnh
 
 ```powershell
 .\.venv\Scripts\python.exe .\src\main.py -h
