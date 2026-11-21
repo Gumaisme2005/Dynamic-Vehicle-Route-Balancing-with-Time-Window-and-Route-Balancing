@@ -301,3 +301,28 @@ Kết quả được lưu tại `result\<ten_dataset>\p<index>_<run_name>\`:
 .\.venv\Scripts\python.exe .\src\main.py -h
 .\.venv\Scripts\python.exe .\src-CMMA\main.py -h
 ```
+
+---
+
+## Lời cảm ơn & Tài liệu tham khảo (Acknowledgements)
+
+Xin chân thành cảm ơn các tác giả **Jianhua Xiao, Detian Kong, Zhiguang Cao và Jingyi Zhao** đã nghiên cứu, công bố bài báo khoa học và chia sẻ mã nguồn mở gốc của mô hình **Equity Attention Model (E-AM)** cùng bản cài đặt đối chiếu **CMMA** cho bài toán **VRPRB**. Toàn bộ phần thuật toán lõi trong `src/` và `src-CMMA/` được kế thừa trực tiếp từ kho mã nguồn chính thức của nhóm tác giả; repo này chỉ bổ sung nâng cấp tương thích môi trường mới (Python 3.10–3.15+, PyTorch $\ge 2.0$, thay thế `geatpy`/`hvwfg` bằng NumPy) và giao diện Web Dashboard (`web/`) để phục vụ học tập và nghiên cứu.
+
+* **Kho mã nguồn gốc trên GitHub:** https://github.com/dtkon/E-AM-for-VRPRB
+* **Bài báo gốc:** Jianhua Xiao, Detian Kong, Zhiguang Cao, Jingyi Zhao (2026). *"Deep reinforcement learning for the vehicle routing problem with route balancing"*, **Transportation Research Part E**, 208, 104632.
+  * **DOI:** https://doi.org/10.1016/j.tre.2025.104632
+* **Thuật toán đối chiếu CMMA (`src-CMMA/`):** Cài đặt lại bằng Python từ nghiên cứu của Zhang, Z., Sun, Y., Xie, H., Teng, Y., & Wang, J. (2019). *"GMMA: GPU-based multiobjective memetic algorithms for vehicle routing problem with route balancing"*, **Applied Intelligence**, 49, 63–78.
+
+### Trích dẫn (BibTeX)
+```bibtex
+@article{xiao2026eam_vrprb,
+  title   = {Deep reinforcement learning for the vehicle routing problem with route balancing},
+  author  = {Xiao, Jianhua and Kong, Detian and Cao, Zhiguang and Zhao, Jingyi},
+  journal = {Transportation Research Part E},
+  volume  = {208},
+  pages   = {104632},
+  year    = {2026},
+  doi     = {10.1016/j.tre.2025.104632},
+  url     = {https://github.com/dtkon/E-AM-for-VRPRB}
+}
+```
